@@ -77,8 +77,12 @@ public final class DefaultTsPayloadReaderFactory implements TsPayloadReader.Fact
   public DefaultTsPayloadReaderFactory(@Flags int flags, List<Format> closedCaptionFormats) {
     this.flags = flags;
     if (!isSet(FLAG_OVERRIDE_CAPTION_DESCRIPTORS) && closedCaptionFormats.isEmpty()) {
-      closedCaptionFormats = Collections.singletonList(Format.createTextSampleFormat(null,
-          MimeTypes.APPLICATION_CEA608, 0, null));
+      closedCaptionFormats = new ArrayList();
+      closedCaptionFormats.add(Format.createTextSampleFormat(null,
+              MimeTypes.APPLICATION_CEA608,  0, null));
+      closedCaptionFormats.add(Format.createTextSampleFormat(null,
+              MimeTypes.APPLICATION_CEA708,  0, null));
+
     }
     this.closedCaptionFormats = closedCaptionFormats;
   }
@@ -107,7 +111,7 @@ public final class DefaultTsPayloadReaderFactory implements TsPayloadReader.Fact
       case TsExtractor.TS_STREAM_TYPE_HDMV_DTS:
         return new PesReader(new DtsReader(esInfo.language));
       case TsExtractor.TS_STREAM_TYPE_H262:
-        return new PesReader(new H262Reader());
+        return new PesReader(new H262Reader(buildUserDataReader(esInfo)));
       case TsExtractor.TS_STREAM_TYPE_H264:
         return isSet(FLAG_IGNORE_H264_STREAM) ? null
             : new PesReader(new H264Reader(buildSeiReader(esInfo),
@@ -137,8 +141,34 @@ public final class DefaultTsPayloadReaderFactory implements TsPayloadReader.Fact
    * @return A {@link SeiReader} for closed caption tracks.
    */
   private SeiReader buildSeiReader(EsInfo esInfo) {
+    return new SeiReader(getCCformats(esInfo));
+  }
+
+  /**
+   * If {@link #FLAG_OVERRIDE_CAPTION_DESCRIPTORS} is set, returns a {@link UserDataReader} for
+   * {@link #closedCaptionFormats}. If unset, parses the PMT descriptor information and returns a
+   * {@link UserDataReader} for the declared formats, or {@link #closedCaptionFormats} if the descriptor
+   * is not present.
+   *
+   * @param esInfo The {@link EsInfo} passed to {@link #createPayloadReader(int, EsInfo)}.
+   * @return A {@link UserDataReader} for closed caption tracks.
+   */
+  private UserDataReader buildUserDataReader(EsInfo esInfo) {
+    return new UserDataReader(getCCformats(esInfo));
+  }
+
+  /**
+   * If {@link #FLAG_OVERRIDE_CAPTION_DESCRIPTORS} is set, returns a {@link List<Format>} of
+   * {@link #closedCaptionFormats}. If unset, parses the PMT descriptor information and returns a
+   * {@link List<Format>} for the declared formats, or {@link #closedCaptionFormats} if the descriptor
+   * is not present.
+   *
+   * @param esInfo The {@link EsInfo} passed to {@link #createPayloadReader(int, EsInfo)}.
+   * @return A {@link List<Format>} containing list of closed caption formats.
+   */
+  private List<Format>  getCCformats(EsInfo esInfo) {
     if (isSet(FLAG_OVERRIDE_CAPTION_DESCRIPTORS)) {
-      return new SeiReader(closedCaptionFormats);
+      return closedCaptionFormats;
     }
     ParsableByteArray scratchDescriptorData = new ParsableByteArray(esInfo.descriptorBytes);
     List<Format> closedCaptionFormats = this.closedCaptionFormats;
@@ -166,14 +196,19 @@ public final class DefaultTsPayloadReaderFactory implements TsPayloadReader.Fact
           closedCaptionFormats.add(Format.createTextSampleFormat(null, mimeType, null,
               Format.NO_VALUE, 0, language, accessibilityChannel, null));
           // Skip easy_reader(1), wide_aspect_ratio(1), reserved(14).
-          scratchDescriptorData.skipBytes(2);
+          byte misc = (byte)scratchDescriptorData.readUnsignedByte();
+          boolean isWideAspectRatio = ((misc & 0x60) == 0x60);
+          closedCaptionFormats.add(Format.createTextSampleFormat(null, mimeType, null,
+                  Format.NO_VALUE, 0, language, accessibilityChannel, null,
+                  isWideAspectRatio));
+          scratchDescriptorData.skipBytes(1);
         }
       } else {
         // Unknown descriptor. Ignore.
       }
       scratchDescriptorData.setPosition(nextDescriptorPosition);
     }
-    return new SeiReader(closedCaptionFormats);
+    return closedCaptionFormats;
   }
 
   private boolean isSet(@Flags int flag) {

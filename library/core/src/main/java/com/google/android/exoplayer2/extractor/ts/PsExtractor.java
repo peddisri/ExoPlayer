@@ -198,7 +198,7 @@ public final class PsExtractor implements Extractor {
           elementaryStreamReader = new MpegAudioReader();
           foundAudioTrack = true;
         } else if (!foundVideoTrack && (streamId & VIDEO_STREAM_MASK) == VIDEO_STREAM) {
-          elementaryStreamReader = new H262Reader();
+          elementaryStreamReader = new H262Reader(null);
           foundVideoTrack = true;
         }
         if (elementaryStreamReader != null) {

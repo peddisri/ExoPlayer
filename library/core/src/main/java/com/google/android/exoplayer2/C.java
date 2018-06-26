@@ -78,6 +78,11 @@ public final class C {
   public static final long NANOS_PER_SECOND = 1000000000L;
 
   /**
+   * The number of 10th of a second per microseconds.
+   */
+  public static final long TENTH_OF_SECOND_PER_MICROSECOND = 100000L;
+
+  /**
    * The name of the ASCII charset.
    */
   public static final String ASCII_NAME = "US-ASCII";
